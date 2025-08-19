@@ -1,67 +1,15 @@
 import { useEffect, useState } from "react";
 import { Table, Card, Spin, Alert, InputNumber, Select, Button, Tabs, Typography } from "antd";
-import type { TableProps } from 'antd';
-import OIChart from "./OIChart";
+import OIChart from "./Chart";
 
 const { Option } = Select;
 const { Title } = Typography;
 const { TabPane } = Tabs;
 
-// --- TYPE DEFINITIONS for OptionChainTable ---
-
-// Describes a single record in the main option chain table
-type OptionRecord = {
-  key: string;
-  timestamp: string;
-  expiryDate: string;
-  strikePrice: number;
-  underlyingValue: number | null;
-  ceOpenInterest?: number;
-  ceChangeInOI?: number;
-  cePChangeInOI?: number;
-  ceVolume?: number;
-  ceIV?: number;
-  ceLTP?: number;
-  peOpenInterest?: number;
-  peChangeInOI?: number;
-  pePChangeInOI?: number;
-  peVolume?: number;
-  peIV?: number;
-  peLTP?: number;
-};
-
-// Describes the data for the summary table
-type SummaryData = {
-  expiryDate: string;
-  totalCEOI: number;
-  totalCECCOI: number;
-  totalCEVol: number;
-  totalPEOI: number;
-  totalPECCOI: number;
-  totalPEVol: number;
-  pcrOI: number;
-};
-
-// Describes a single data point for the charts
-type ChartData = {
-  timestamp: number;
-  ceOI: number;
-  peOI: number;
-  ceVol: number;
-  peVol: number;
-};
-
-// Describes a single data point for the Change in OI chart
-type ChangeInOIData = {
-    timestamp: number;
-    ccoi: number;
-    pcoi: number;
-}
-
 // --- HELPER FUNCTIONS ---
 
-function aggregateOIDataForChart(records: OptionRecord[]): ChartData[] {
-  const timestampMap = new Map<number, ChartData>();
+function aggregateOIDataForChart(records) {
+  const timestampMap = new Map();
   records.forEach(record => {
     const timestamp = record.timestamp;
     if (!timestamp) return;
@@ -71,7 +19,7 @@ function aggregateOIDataForChart(records: OptionRecord[]): ChartData[] {
         timestamp: actualTimestamp, ceOI: 0, peOI: 0, ceVol: 0, peVol: 0
       });
     }
-    const entry = timestampMap.get(actualTimestamp)!;
+    const entry = timestampMap.get(actualTimestamp);
     entry.ceOI += record.ceOpenInterest || 0;
     entry.peOI += record.peOpenInterest || 0;
     entry.ceVol += record.ceVolume || 0;
@@ -80,8 +28,8 @@ function aggregateOIDataForChart(records: OptionRecord[]): ChartData[] {
   return Array.from(timestampMap.values()).sort((a, b) => a.timestamp - b.timestamp);
 }
 
-function aggregateChangeInOIDataForChart(records: OptionRecord[]): ChangeInOIData[] {
-  const timestampMap = new Map<number, ChangeInOIData>();
+function aggregateChangeInOIDataForChart(records) {
+  const timestampMap = new Map();
   records.forEach(record => {
     const timestamp = record.timestamp;
     if (!timestamp) return;
@@ -89,16 +37,16 @@ function aggregateChangeInOIDataForChart(records: OptionRecord[]): ChangeInOIDat
     if (!timestampMap.has(actualTimestamp)) {
       timestampMap.set(actualTimestamp, { timestamp: actualTimestamp, ccoi: 0, pcoi: 0 });
     }
-    const entry = timestampMap.get(actualTimestamp)!;
+    const entry = timestampMap.get(actualTimestamp);
     entry.ccoi += record.ceChangeInOI || 0;
     entry.pcoi += record.peChangeInOI || 0;
   });
   return Array.from(timestampMap.values()).sort((a, b) => a.timestamp - b.timestamp);
 }
 
-function getSummaryDataForExpiry(records: OptionRecord[], expiry: string): SummaryData {
+function getSummaryDataForExpiry(records, expiry) {
     const filtered = records.filter((rec) => rec.expiryDate === expiry);
-    const summary: SummaryData = {
+    const summary = {
         expiryDate: expiry, totalCEOI: 0, totalCECCOI: 0, totalCEVol: 0,
         totalPEOI: 0, totalPECCOI: 0, totalPEVol: 0, pcrOI: 0,
     };
@@ -116,7 +64,7 @@ function getSummaryDataForExpiry(records: OptionRecord[], expiry: string): Summa
 
 // --- COLUMN DEFINITIONS ---
 
-const columns: TableProps<OptionRecord>['columns'] = [
+const columns = [
     { title: "Timestamp", dataIndex: "timestamp", key: "timestamp", width: 130, align: "center", sorter: (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(), defaultSortOrder: 'descend' },
     { title: "Expiry Date", dataIndex: "expiryDate", key: "expiryDate", sorter: (a, b) => a.expiryDate.localeCompare(b.expiryDate), width: 100, align: "center" },
     { title: "COI", dataIndex: "ceOpenInterest", key: "ceOpenInterest", render: (v) => (v !== undefined ? v.toLocaleString() : "-"), sorter: (a, b) => (a.ceOpenInterest || 0) - (b.ceOpenInterest || 0), align: "right", width: 80 },
@@ -137,7 +85,7 @@ const columns: TableProps<OptionRecord>['columns'] = [
     { title: "PCR", dataIndex: "pcr", key: "pcr", render: (_, record) => { const peOI = record?.peOpenInterest || 0; const ceOI = record?.ceOpenInterest || 0; if (ceOI === 0) return "-"; const pcr = peOI / ceOI; return isFinite(pcr) ? pcr.toFixed(2) : "-"; }, sorter: (a, b) => { const pcrA = (a.ceOpenInterest || 0) === 0 ? 0 : (a.peOpenInterest || 0) / a.ceOpenInterest; const pcrB = (b.ceOpenInterest || 0) === 0 ? 0 : (b.peOpenInterest || 0) / b.ceOpenInterest; return (isFinite(pcrA) ? pcrA : 0) - (isFinite(pcrB) ? pcrB : 0); }, width: 80, align: "right" },
 ];
 
-const summaryColumns: TableProps<SummaryData>['columns'] = [
+const summaryColumns = [
     { title: "Expiry Date", dataIndex: "expiryDate", key: "expiryDate", align: "center" },
     { title: "Call OI", dataIndex: "totalCEOI", key: "totalCEOI", render: (v) => v.toLocaleString(), align: "right" },
     { title: "Call CCOI", dataIndex: "totalCECCOI", key: "totalCECCOI", render: (v) => v.toLocaleString(), align: "right" },
@@ -151,24 +99,24 @@ const summaryColumns: TableProps<SummaryData>['columns'] = [
 // --- MAIN TABLE COMPONENT ---
 
 function OptionChainTable() {
-    const [rawRecords, setRawRecords] = useState<OptionRecord[]>([]);
-    const [expiryDates, setExpiryDates] = useState<string[]>([]);
-    const [summaryData, setSummaryData] = useState<SummaryData[]>([]);
-    const [meta, setMeta] = useState<{ timestamp: string; underlyingValue: number }>({ timestamp: "", underlyingValue: 0 });
-    const [loading, setLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string | null>(null);
-    const [records, setRecords] = useState<OptionRecord[]>([]);
-    const [minStrike, setMinStrike] = useState<number | null>(null);
-    const [maxStrike, setMaxStrike] = useState<number | null>(null);
-    const [selectedExpiry, setSelectedExpiry] = useState<string | undefined>(undefined);
-    const [historicalData, setHistoricalData] = useState<ChartData[]>([]);
-    const [changeInData, setChangeInData] = useState<ChangeInOIData[]>([]);
-    const [isDataReceived, setDataReceived] = useState<boolean>(false);
-    const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'receiving' | 'error'>('connecting');
+    const [rawRecords, setRawRecords] = useState([]);
+    const [expiryDates, setExpiryDates] = useState([]);
+    const [summaryData, setSummaryData] = useState([]);
+    const [meta, setMeta] = useState({ timestamp: "", underlyingValue: 0 });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [records, setRecords] = useState([]);
+    const [minStrike, setMinStrike] = useState(null);
+    const [maxStrike, setMaxStrike] = useState(null);
+    const [selectedExpiry, setSelectedExpiry] = useState(undefined);
+    const [historicalData, setHistoricalData] = useState([]);
+    const [changeInData, setChangeInData] = useState([]);
+    const [isDataReceived, setDataReceived] = useState(false);
+    const [connectionStatus, setConnectionStatus] = useState('connecting');
 
     useEffect(() => {
-        let eventSource: EventSource | null = null;
-        let retryTimeoutId: NodeJS.Timeout | null = null;
+        let eventSource = null;
+        let retryTimeoutId = null;
         let retryCount = 0;
         const maxRetries = 5;
 
@@ -179,7 +127,7 @@ function OptionChainTable() {
                 eventSource = new EventSource("https://nsedata-production.up.railway.app/api/data");
                 eventSource.onopen = () => { setConnectionStatus('connected'); retryCount = 0; };
                 
-                eventSource.onmessage = (event: MessageEvent) => {
+                eventSource.onmessage = (event) => {
                     try {
                         setLoading(false);
                         setConnectionStatus('receiving');
@@ -188,18 +136,18 @@ function OptionChainTable() {
                         const parsedData = JSON.parse(event.data);
                         if (!parsedData) return;
 
-                        let dataArray: any[], latestTimestamp: string, latestUnderlyingValue: number;
+                        let dataArray, latestTimestamp, latestUnderlyingValue;
                         
                         if (Array.isArray(parsedData) && parsedData.length > 0) {
-                            const allRecordsData: any[] = [];
-                            const timestampsSet = new Set<string>();
+                            const allRecordsData = [];
+                            const timestampsSet = new Set();
                             
                             for (const record of parsedData) {
                                 if (record && record.data && Array.isArray(record.data)) {
                                     const recordTimestamp = record.timestamp || record.TimeStamp;
                                     const recordUnderlyingValue = record.underlyingValue || record.UnderlyingValue;
                                     timestampsSet.add(recordTimestamp);
-                                    const recordDataWithMeta = record.data.map((item: any) => ({ ...item, recordTimestamp, recordUnderlyingValue }));
+                                    const recordDataWithMeta = record.data.map((item) => ({ ...item, recordTimestamp, recordUnderlyingValue }));
                                     allRecordsData.push(...recordDataWithMeta);
                                 }
                             }
@@ -213,8 +161,8 @@ function OptionChainTable() {
                         if (!dataArray || dataArray.length === 0) return;
                         setDataReceived(true);
 
-                        const recordMap: { [key: string]: OptionRecord } = {};
-                        const expirySet = new Set<string>();
+                        const recordMap = {};
+                        const expirySet = new Set();
 
                         for (const item of dataArray) {
                             if (!item || typeof item !== 'object') continue;
@@ -311,11 +259,11 @@ function OptionChainTable() {
     }, [rawRecords, selectedExpiry, expiryDates]);
 
     const statusInfo = {
-        connecting: { message: "Connecting to data stream...", type: "info" as const },
-        connected: { message: isDataReceived ? "Connected, streaming data" : "Connected, waiting for data...", type: "success" as const },
-        receiving: { message: "Live data stream active", type: "success" as const },
-        error: { message: error || "Connection error", type: "error" as const },
-    }[connectionStatus] || { message: "Unknown status", type: "warning" as const };
+        connecting: { message: "Connecting to data stream...", type: "info" },
+        connected: { message: isDataReceived ? "Connected, streaming data" : "Connected, waiting for data...", type: "success" },
+        receiving: { message: "Live data stream active", type: "success" },
+        error: { message: error || "Connection error", type: "error" },
+    }[connectionStatus] || { message: "Unknown status", type: "warning" };
 
     return (
         <div className="w-screen h-screen overflow-auto bg-white p-4">
