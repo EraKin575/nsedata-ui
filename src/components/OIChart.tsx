@@ -1,4 +1,5 @@
-// src/components/OIChart.jsx
+import React from "react";
+import { Alert } from "antd";
 import {
   LineChart,
   Line,
@@ -9,9 +10,19 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { Alert } from "antd";
 
-export default function OIChart({ data, callLineName, putLineName }) {
+// --- TYPE DEFINITIONS for OIChart ---
+
+// Props for the OIChart component
+interface OIChartProps {
+  data: { timestamp: number; ceOI: number; peOI: number }[];
+  callLineName: string;
+  putLineName: string;
+}
+
+// --- OI CHART COMPONENT ---
+
+const OIChart: React.FC<OIChartProps> = ({ data, callLineName, putLineName }) => {
   if (!data || data.length === 0) {
     return (
       <Alert
@@ -29,10 +40,10 @@ export default function OIChart({ data, callLineName, putLineName }) {
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis
           dataKey="timestamp"
-          tickFormatter={(t) => new Date(t).toLocaleTimeString()}
+          tickFormatter={(t: number) => new Date(t).toLocaleTimeString()}
         />
         <YAxis
-          tickFormatter={(value) =>
+          tickFormatter={(value: number) =>
             new Intl.NumberFormat("en-IN", {
               notation: "compact",
               compactDisplay: "short",
@@ -40,8 +51,8 @@ export default function OIChart({ data, callLineName, putLineName }) {
           }
         />
         <Tooltip
-          labelFormatter={(t) => new Date(t).toLocaleString()}
-          formatter={(value, name) => [value.toLocaleString(), name]}
+          labelFormatter={(t: number) => new Date(t).toLocaleString()}
+          formatter={(value: number, name: string) => [value.toLocaleString(), name]}
         />
         <Legend />
         <Line
@@ -63,4 +74,5 @@ export default function OIChart({ data, callLineName, putLineName }) {
       </LineChart>
     </ResponsiveContainer>
   );
-}
+};
+export default OIChart;

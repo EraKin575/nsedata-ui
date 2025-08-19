@@ -1,14 +1,67 @@
 import { useEffect, useState } from "react";
 import { Table, Card, Spin, Alert, InputNumber, Select, Button, Tabs, Typography } from "antd";
+import type { TableProps } from 'antd';
 import OIChart from "./OIChart";
 
 const { Option } = Select;
 const { Title } = Typography;
 const { TabPane } = Tabs;
 
-// Helper function to aggregate OI and Volume data
-function aggregateOIDataForChart(records) {
-  const timestampMap = new Map();
+// --- TYPE DEFINITIONS for OptionChainTable ---
+
+// Describes a single record in the main option chain table
+type OptionRecord = {
+  key: string;
+  timestamp: string;
+  expiryDate: string;
+  strikePrice: number;
+  underlyingValue: number | null;
+  ceOpenInterest?: number;
+  ceChangeInOI?: number;
+  cePChangeInOI?: number;
+  ceVolume?: number;
+  ceIV?: number;
+  ceLTP?: number;
+  peOpenInterest?: number;
+  peChangeInOI?: number;
+  pePChangeInOI?: number;
+  peVolume?: number;
+  peIV?: number;
+  peLTP?: number;
+};
+
+// Describes the data for the summary table
+type SummaryData = {
+  expiryDate: string;
+  totalCEOI: number;
+  totalCECCOI: number;
+  totalCEVol: number;
+  totalPEOI: number;
+  totalPECCOI: number;
+  totalPEVol: number;
+  pcrOI: number;
+};
+
+// Describes a single data point for the charts
+type ChartData = {
+  timestamp: number;
+  ceOI: number;
+  peOI: number;
+  ceVol: number;
+  peVol: number;
+};
+
+// Describes a single data point for the Change in OI chart
+type ChangeInOIData = {
+    timestamp: number;
+    ccoi: number;
+    pcoi: number;
+}
+
+// --- HELPER FUNCTIONS ---
+
+function aggregateOIDataForChart(records: OptionRecord[]): ChartData[] {
+  const timestampMap = new Map<number, ChartData>();
   records.forEach(record => {
     const timestamp = record.timestamp;
     if (!timestamp) return;
@@ -18,7 +71,7 @@ function aggregateOIDataForChart(records) {
         timestamp: actualTimestamp, ceOI: 0, peOI: 0, ceVol: 0, peVol: 0
       });
     }
-    const entry = timestampMap.get(actualTimestamp);
+    const entry = timestampMap.get(actualTimestamp)!;
     entry.ceOI += record.ceOpenInterest || 0;
     entry.peOI += record.peOpenInterest || 0;
     entry.ceVol += record.ceVolume || 0;
@@ -27,9 +80,8 @@ function aggregateOIDataForChart(records) {
   return Array.from(timestampMap.values()).sort((a, b) => a.timestamp - b.timestamp);
 }
 
-// Helper function to aggregate Change in OI data
-function aggregateChangeInOIDataForChart(records) {
-  const timestampMap = new Map();
+function aggregateChangeInOIDataForChart(records: OptionRecord[]): ChangeInOIData[] {
+  const timestampMap = new Map<number, ChangeInOIData>();
   records.forEach(record => {
     const timestamp = record.timestamp;
     if (!timestamp) return;
@@ -37,17 +89,16 @@ function aggregateChangeInOIDataForChart(records) {
     if (!timestampMap.has(actualTimestamp)) {
       timestampMap.set(actualTimestamp, { timestamp: actualTimestamp, ccoi: 0, pcoi: 0 });
     }
-    const entry = timestampMap.get(actualTimestamp);
+    const entry = timestampMap.get(actualTimestamp)!;
     entry.ccoi += record.ceChangeInOI || 0;
     entry.pcoi += record.peChangeInOI || 0;
   });
   return Array.from(timestampMap.values()).sort((a, b) => a.timestamp - b.timestamp);
 }
 
-// Helper function to get summary data
-function getSummaryDataForExpiry(records, expiry) {
+function getSummaryDataForExpiry(records: OptionRecord[], expiry: string): SummaryData {
     const filtered = records.filter((rec) => rec.expiryDate === expiry);
-    const summary = {
+    const summary: SummaryData = {
         expiryDate: expiry, totalCEOI: 0, totalCECCOI: 0, totalCEVol: 0,
         totalPEOI: 0, totalPECCOI: 0, totalPEVol: 0, pcrOI: 0,
     };
@@ -63,8 +114,9 @@ function getSummaryDataForExpiry(records, expiry) {
     return summary;
 }
 
-// Column definitions
-const columns = [
+// --- COLUMN DEFINITIONS ---
+
+const columns: TableProps<OptionRecord>['columns'] = [
     { title: "Timestamp", dataIndex: "timestamp", key: "timestamp", width: 130, align: "center", sorter: (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(), defaultSortOrder: 'descend' },
     { title: "Expiry Date", dataIndex: "expiryDate", key: "expiryDate", sorter: (a, b) => a.expiryDate.localeCompare(b.expiryDate), width: 100, align: "center" },
     { title: "COI", dataIndex: "ceOpenInterest", key: "ceOpenInterest", render: (v) => (v !== undefined ? v.toLocaleString() : "-"), sorter: (a, b) => (a.ceOpenInterest || 0) - (b.ceOpenInterest || 0), align: "right", width: 80 },
@@ -81,10 +133,11 @@ const columns = [
     { title: "PCOI", dataIndex: "peChangeInOI", key: "peChangeInOI", render: (v) => (v !== undefined ? v.toLocaleString() : "-"), sorter: (a, b) => (a.peChangeInOI || 0) - (b.peChangeInOI || 0), width: 80, align: "right" },
     { title: "PCOI%", dataIndex: "pePChangeInOI", key: "pePChangeInOI", render: (v) => (v !== undefined ? v.toFixed(2) + "%" : "-"), sorter: (a, b) => (a.pePChangeInOI || 0) - (b.pePChangeInOI || 0), width: 80, align: "right" },
     { title: "POI", dataIndex: "peOpenInterest", key: "peOpenInterest", render: (v) => (v !== undefined ? v.toLocaleString() : "-"), sorter: (a, b) => (a.peOpenInterest || 0) - (b.peOpenInterest || 0), width: 80, align: "right" },
-    { title: "IntraDay PCR", dataIndex: "intradayPCR", key: "intradayPCR", render: (_, record) => { const pePChange = record?.pePChangeInOI || 0; const cePChange = record?.cePChangeInOI || 0; if (cePChange === 0) return "-"; const pcr = pePChange / cePChange; return isFinite(pcr) ? pcr.toFixed(2) : "-"; }, sorter: (a, b) => { const pcrA = (a.cePChangeInOI || 0) === 0 ? 0 : (a.pePChangeInOI || 0) / a.cePChangeInOI; const pcrB = (b.cePChangeInOI || 0) === 0 ? 0 : (b.pePChangeInOI || 0) / b.cePChangeInOI; return (isFinite(pcrA) ? pcrA : 0) - (isFinite(pcrB) ? pcrB : 0); }, width: 100, align: "right" },
+    { title: "IntraDay PCR", dataIndex: "intradayPCR", key: "intradayPCR", render: (_, record) => { const pePChange = record?.pePChangeInOI || 0; const cePChange = record?.cePChangeInOI || 0; if (cePChange === 0) return "-"; const pcr = pePChange / cePChange; return isFinite(pcr) ? pcr.toFixed(2) : "-"; }, sorter: (a, b) => { const pcrA = (a.cePChangeInOI || 0) === 0 ? 0 : (a.pePChangeInOI || 0) / a.cePChangeInOI; const pcrB = (b.cePChangeInOI || 0) === 0 ? 0 : (b.cePChangeInOI || 0) / b.cePChangeInOI; return (isFinite(pcrA) ? pcrA : 0) - (isFinite(pcrB) ? pcrB : 0); }, width: 100, align: "right" },
     { title: "PCR", dataIndex: "pcr", key: "pcr", render: (_, record) => { const peOI = record?.peOpenInterest || 0; const ceOI = record?.ceOpenInterest || 0; if (ceOI === 0) return "-"; const pcr = peOI / ceOI; return isFinite(pcr) ? pcr.toFixed(2) : "-"; }, sorter: (a, b) => { const pcrA = (a.ceOpenInterest || 0) === 0 ? 0 : (a.peOpenInterest || 0) / a.ceOpenInterest; const pcrB = (b.ceOpenInterest || 0) === 0 ? 0 : (b.peOpenInterest || 0) / b.ceOpenInterest; return (isFinite(pcrA) ? pcrA : 0) - (isFinite(pcrB) ? pcrB : 0); }, width: 80, align: "right" },
 ];
-const summaryColumns = [
+
+const summaryColumns: TableProps<SummaryData>['columns'] = [
     { title: "Expiry Date", dataIndex: "expiryDate", key: "expiryDate", align: "center" },
     { title: "Call OI", dataIndex: "totalCEOI", key: "totalCEOI", render: (v) => v.toLocaleString(), align: "right" },
     { title: "Call CCOI", dataIndex: "totalCECCOI", key: "totalCECCOI", render: (v) => v.toLocaleString(), align: "right" },
@@ -95,50 +148,58 @@ const summaryColumns = [
     { title: "PCR (OI)", dataIndex: "pcrOI", key: "pcrOI", render: (v) => v.toFixed(2), align: "right" },
 ];
 
+// --- MAIN TABLE COMPONENT ---
+
 function OptionChainTable() {
-    const [rawRecords, setRawRecords] = useState([]);
-    const [expiryDates, setExpiryDates] = useState([]);
-    const [summaryData, setSummaryData] = useState([]);
-    const [meta, setMeta] = useState({ timestamp: "", underlyingValue: 0 });
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [records, setRecords] = useState([]);
-    const [minStrike, setMinStrike] = useState(null);
-    const [maxStrike, setMaxStrike] = useState(null);
-    const [selectedExpiry, setSelectedExpiry] = useState(undefined);
-    const [historicalData, setHistoricalData] = useState([]);
-    const [changeInData, setChangeInData] = useState([]);
-    const [isDataReceived, setDataReceived] = useState(false);
-    const [connectionStatus, setConnectionStatus] = useState('connecting');
+    const [rawRecords, setRawRecords] = useState<OptionRecord[]>([]);
+    const [expiryDates, setExpiryDates] = useState<string[]>([]);
+    const [summaryData, setSummaryData] = useState<SummaryData[]>([]);
+    const [meta, setMeta] = useState<{ timestamp: string; underlyingValue: number }>({ timestamp: "", underlyingValue: 0 });
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+    const [records, setRecords] = useState<OptionRecord[]>([]);
+    const [minStrike, setMinStrike] = useState<number | null>(null);
+    const [maxStrike, setMaxStrike] = useState<number | null>(null);
+    const [selectedExpiry, setSelectedExpiry] = useState<string | undefined>(undefined);
+    const [historicalData, setHistoricalData] = useState<ChartData[]>([]);
+    const [changeInData, setChangeInData] = useState<ChangeInOIData[]>([]);
+    const [isDataReceived, setDataReceived] = useState<boolean>(false);
+    const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'receiving' | 'error'>('connecting');
 
     useEffect(() => {
-        let eventSource = null;
-        let retryTimeoutId = null;
+        let eventSource: EventSource | null = null;
+        let retryTimeoutId: NodeJS.Timeout | null = null;
         let retryCount = 0;
         const maxRetries = 5;
+
         const connectSSE = () => {
             setConnectionStatus('connecting');
             setError(null);
             try {
                 eventSource = new EventSource("https://nsedata-production.up.railway.app/api/data");
                 eventSource.onopen = () => { setConnectionStatus('connected'); retryCount = 0; };
-                eventSource.onmessage = (event) => {
+                
+                eventSource.onmessage = (event: MessageEvent) => {
                     try {
                         setLoading(false);
                         setConnectionStatus('receiving');
                         if (!event.data || event.data.trim() === '') return;
+                        
                         const parsedData = JSON.parse(event.data);
                         if (!parsedData) return;
-                        let dataArray, latestTimestamp, latestUnderlyingValue;
+
+                        let dataArray: any[], latestTimestamp: string, latestUnderlyingValue: number;
+                        
                         if (Array.isArray(parsedData) && parsedData.length > 0) {
-                            const allRecordsData = [];
-                            const timestampsSet = new Set();
+                            const allRecordsData: any[] = [];
+                            const timestampsSet = new Set<string>();
+                            
                             for (const record of parsedData) {
                                 if (record && record.data && Array.isArray(record.data)) {
                                     const recordTimestamp = record.timestamp || record.TimeStamp;
                                     const recordUnderlyingValue = record.underlyingValue || record.UnderlyingValue;
                                     timestampsSet.add(recordTimestamp);
-                                    const recordDataWithMeta = record.data.map(item => ({ ...item, recordTimestamp, recordUnderlyingValue }));
+                                    const recordDataWithMeta = record.data.map((item: any) => ({ ...item, recordTimestamp, recordUnderlyingValue }));
                                     allRecordsData.push(...recordDataWithMeta);
                                 }
                             }
@@ -148,47 +209,75 @@ function OptionChainTable() {
                             const latestRecord = parsedData.find(r => (r.timestamp || r.TimeStamp) === latestTimestamp);
                             latestUnderlyingValue = latestRecord?.underlyingValue || latestRecord?.UnderlyingValue;
                         } else { setError('Unexpected data structure from server.'); return; }
+                        
                         if (!dataArray || dataArray.length === 0) return;
                         setDataReceived(true);
-                        const recordMap = {};
-                        const expirySet = new Set();
+
+                        const recordMap: { [key: string]: OptionRecord } = {};
+                        const expirySet = new Set<string>();
+
                         for (const item of dataArray) {
                             if (!item || typeof item !== 'object') continue;
                             const { strikePrice, expiryDate, recordTimestamp, CE, PE } = item;
                             if (!strikePrice || !expiryDate || !recordTimestamp) continue;
+                            
                             const key = `${strikePrice}-${expiryDate}-${recordTimestamp}`;
                             expirySet.add(expiryDate);
+
                             if (!recordMap[key]) {
                                 recordMap[key] = { key, strikePrice: Number(strikePrice), expiryDate, timestamp: recordTimestamp, underlyingValue: Number(item.recordUnderlyingValue) || null };
                             }
                             if (CE) Object.assign(recordMap[key], { ceOpenInterest: Number(CE.openInterest || 0), ceChangeInOI: Number(CE.changeinOpenInterest || 0), cePChangeInOI: Number(CE.pchangeinOpenInterest || 0), ceVolume: Number(CE.totalTradedVolume || 0), ceIV: Number(CE.impliedVolatility || 0), ceLTP: Number(CE.lastPrice || 0) });
                             if (PE) Object.assign(recordMap[key], { peOpenInterest: Number(PE.openInterest || 0), peChangeInOI: Number(PE.changeinOpenInterest || 0), pePChangeInOI: Number(PE.pchangeinOpenInterest || 0), peVolume: Number(PE.totalTradedVolume || 0), peIV: Number(PE.impliedVolatility || 0), peLTP: Number(PE.lastPrice || 0) });
                         }
+
                         const allRecords = Object.values(recordMap);
                         if (allRecords.length === 0) { setError('No valid records processed'); return; }
+                        
                         setRawRecords(allRecords);
                         setExpiryDates([...expirySet].sort());
                         setMeta({ timestamp: latestTimestamp, underlyingValue: Number(latestUnderlyingValue) || 0 });
                         setError(null);
                         setConnectionStatus('connected');
-                    } catch (err) { setError(`Data processing error: ${err.message}`); setConnectionStatus('error'); }
+                    } catch (err) { 
+                        const errorMessage = err instanceof Error ? err.message : String(err);
+                        setError(`Data processing error: ${errorMessage}`); 
+                        setConnectionStatus('error'); 
+                    }
                 };
+
                 eventSource.onerror = () => {
                     setConnectionStatus('error');
-                    if (eventSource.readyState === EventSource.CLOSED) { setError("Connection closed. Retrying..."); retryConnection(); }
+                    if (eventSource && eventSource.readyState === EventSource.CLOSED) { 
+                        setError("Connection closed. Retrying..."); 
+                        retryConnection(); 
+                    }
                     setLoading(false);
                 };
-            } catch (err) { setError(`Connection error: ${err.message}`); setLoading(false); setConnectionStatus('error'); }
+            } catch (err) { 
+                const errorMessage = err instanceof Error ? err.message : String(err);
+                setError(`Connection error: ${errorMessage}`); 
+                setLoading(false); 
+                setConnectionStatus('error'); 
+            }
         };
+
         const retryConnection = () => {
             if (retryCount < maxRetries) {
                 retryCount++;
                 const delay = Math.min(1000 * 2 ** retryCount, 30000);
                 retryTimeoutId = setTimeout(connectSSE, delay);
-            } else { setError("Failed to connect after multiple attempts."); }
+            } else {
+                setError("Failed to connect after multiple attempts.");
+            }
         };
+
         connectSSE();
-        return () => { if (eventSource) eventSource.close(); if (retryTimeoutId) clearTimeout(retryTimeoutId); };
+
+        return () => { 
+            if (eventSource) eventSource.close(); 
+            if (retryTimeoutId) clearTimeout(retryTimeoutId); 
+        };
     }, []);
 
     useEffect(() => {
@@ -222,16 +311,15 @@ function OptionChainTable() {
     }, [rawRecords, selectedExpiry, expiryDates]);
 
     const statusInfo = {
-        connecting: { message: "Connecting to data stream...", type: "info" },
-        connected: { message: isDataReceived ? "Connected, streaming data" : "Connected, waiting for data...", type: "success" },
-        receiving: { message: "Live data stream active", type: "success" },
-        error: { message: error || "Connection error", type: "error" },
-    }[connectionStatus] || { message: "Unknown status", type: "warning" };
+        connecting: { message: "Connecting to data stream...", type: "info" as const },
+        connected: { message: isDataReceived ? "Connected, streaming data" : "Connected, waiting for data...", type: "success" as const },
+        receiving: { message: "Live data stream active", type: "success" as const },
+        error: { message: error || "Connection error", type: "error" as const },
+    }[connectionStatus] || { message: "Unknown status", type: "warning" as const };
 
     return (
         <div className="w-screen h-screen overflow-auto bg-white p-4">
             <Card
-                className=""
                 bordered={false}
                 title={
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4">
@@ -253,9 +341,9 @@ function OptionChainTable() {
                         <div className="flex flex-col sm:flex-row flex-wrap items-center gap-4 mb-4">
                             <div className="flex items-center gap-2">
                                 <span className="font-semibold text-gray-600">Strike Price:</span>
-                                <InputNumber size="small" placeholder="Min" value={minStrike} onChange={setMinStrike} className="!w-24" />
+                                <InputNumber size="small" placeholder="Min" value={minStrike} onChange={(value) => setMinStrike(value)} className="!w-24" />
                                 <span>-</span>
-                                <InputNumber size="small" placeholder="Max" value={maxStrike} onChange={setMaxStrike} className="!w-24" />
+                                <InputNumber size="small" placeholder="Max" value={maxStrike} onChange={(value) => setMaxStrike(value)} className="!w-24" />
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="font-semibold text-gray-600">Expiry Date:</span>
