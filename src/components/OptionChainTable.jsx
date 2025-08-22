@@ -174,7 +174,7 @@ function OptionChainTable() {
       setConnectionStatus('connecting');
       setError(null);
       try {
-        eventSource = new EventSource("http://localhost:8090/api/data");
+        eventSource = new EventSource("https://nsedata-production.up.railway.app");
         eventSource.onopen = () => {
           setConnectionStatus('connected');
           retryCount = 0;
