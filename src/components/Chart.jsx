@@ -1,17 +1,14 @@
-import { Alert } from "antd";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import React, { useEffect, useState } from "react";
+import { Table, Card, Spin, Alert, InputNumber, Select, Button, Tabs, Typography } from "antd";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-// --- OI CHART COMPONENT ---
 
+const { Option } = Select;
+const { Title } = Typography;
+const { TabPane } = Tabs;
+
+// --- CHART COMPONENT ---
+// The OIChart component has been updated with your new implementation.
 const OIChart = ({ data, callLineName, putLineName }) => {
   if (!data || data.length === 0) {
     return (
