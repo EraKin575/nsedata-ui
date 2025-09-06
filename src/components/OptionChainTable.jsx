@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Table, Card, Spin, Alert, InputNumber, Select, Button, Tabs, Typography } from "antd";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import OIChart from "./Chart";
 
 const { Option } = Select;
 const { Title } = Typography;
@@ -127,82 +127,6 @@ const summaryColumns = [
   { title: "PCR (OI)", dataIndex: "pcrOI", key: "pcrOI", render: (v) => v.toFixed(2), align: "right" },
 ];
 
-// --- CHART COMPONENT (ONLY TIME PARSING FIXED) ---
-const OIChart = ({ data, callLineName, putLineName }) => {
-  if (!data || data.length === 0) {
-    return (
-      <Alert
-        message="No chart data available"
-        description="Waiting for data points from the stream."
-        type="info"
-        showIcon
-      />
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis
-          dataKey="timestamp"
-          tickFormatter={(t) => {
-            // FIXED: Handle both milliseconds and ISO strings consistently
-            const date = new Date(t);
-            return date.toLocaleTimeString('en-US', { 
-              hour: '2-digit', 
-              minute: '2-digit', 
-              second: '2-digit',
-              timeZone: 'UTC'
-            });
-          }}
-        />
-        <YAxis
-          tickFormatter={(value) =>
-            new Intl.NumberFormat("en-IN", {
-              notation: "compact",
-              compactDisplay: "short",
-            }).format(value)
-          }
-        />
-        <Tooltip
-          labelFormatter={(t) => {
-            // FIXED: Handle both milliseconds and ISO strings consistently
-            const date = new Date(t);
-            return date.toLocaleString('en-US', {
-              timeZone: 'UTC',
-              year: 'numeric',
-              month: 'short', 
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit'
-            }) + ' UTC';
-          }}
-          formatter={(value, name) => [value.toLocaleString(), name]}
-        />
-        <Legend />
-        <Line
-          type="monotone"
-          dataKey="ceOI"
-          stroke="#ff5252"
-          name={callLineName}
-          dot={false}
-          strokeWidth={2}
-        />
-        <Line
-          type="monotone"
-          dataKey="peOI"
-          stroke="#4caf50"
-          name={putLineName}
-          dot={false}
-          strokeWidth={2}
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-};
-
 // --- MAIN TABLE COMPONENT ---
 
 function OptionChainTable() {
@@ -231,7 +155,7 @@ function OptionChainTable() {
       setConnectionStatus('connecting');
       setError(null);
       try {
-        eventSource = new EventSource("https://nsedata-production.up.railway.app/api/data");
+        eventSource = new EventSource("https://processor-production-8076.up.railway.app/api/data");
         eventSource.onopen = () => {
           setConnectionStatus('connected');
           retryCount = 0;
@@ -423,28 +347,30 @@ function OptionChainTable() {
             }
           </TabPane>
           <TabPane tab="OI Charts" key="charts">
-            <div className="mb-4">
-              <Title level={5}>Open Interest Trend {selectedExpiry && <span className="text-sm text-gray-500 ml-2">({formatUTCDate(selectedExpiry)})</span>}</Title>
-              <p className="text-sm text-gray-600 mb-4">Displaying aggregated Call and Put Open Interest over time{selectedExpiry ? ` for expiry ${formatUTCDate(selectedExpiry)}` : ' for all expiries'}. Data points: {historicalData.length}</p>
-              <div style={{ height: 400 }}>
-                <OIChart data={historicalData} callLineName="Call OI" putLineName="Put OI" />
-              </div>
-            </div>
-            <div className="mt-8 mb-4">
-              <Title level={5}>Change in OI (CCOI vs PCOI) Trend {selectedExpiry && <span className="text-sm text-gray-500 ml-2">({formatUTCDate(selectedExpiry)})</span>}</Title>
-              <p className="text-sm text-gray-600 mb-4">Displaying aggregated Call and Put Change in OI over time{selectedExpiry ? ` for expiry ${formatUTCDate(selectedExpiry)}` : ' for all expiries'}. Data points: {changeInData.length}</p>
-              <div style={{ height: 400 }}>
-                <OIChart data={changeInData.map(d => ({ timestamp: d.timestamp, ceOI: d.ccoi, peOI: d.pcoi }))} callLineName="Call Change in OI (CCOI)" putLineName="Put Change in OI (PCOI)" />
-              </div>
-            </div>
-            <div className="mt-8 mb-4">
-              <Title level={5}>Volume Trend {selectedExpiry && <span className="text-sm text-gray-500 ml-2">({formatUTCDate(selectedExpiry)})</span>}</Title>
-              <p className="text-sm text-gray-600 mb-4">Displaying aggregated Call and Put Volumes over time{selectedExpiry ? ` for expiry ${formatUTCDate(selectedExpiry)}` : ' for all expiries'}. Data points: {historicalData.length}</p>
-              <div style={{ height: 400 }}>
-                <OIChart data={historicalData.map(d => ({ timestamp: d.timestamp, ceOI: d.ceVol, peOI: d.peVol }))} callLineName="Call Volume" putLineName="Put Volume" />
-              </div>
-            </div>
-          </TabPane>
+  <div className="mb-8">
+    <Title level={5}>Open Interest Trend {selectedExpiry && <span className="text-sm text-gray-500 ml-2">({formatUTCDate(selectedExpiry)})</span>}</Title>
+    <p className="text-sm text-gray-600 mb-6">Displaying aggregated Call and Put Open Interest over time{selectedExpiry ? ` for expiry ${formatUTCDate(selectedExpiry)}` : ' for all expiries'}. Data points: {historicalData.length}</p>
+    <div style={{ height: 800 }}>
+      <OIChart data={historicalData} callLineName="Call OI" putLineName="Put OI" />
+    </div>
+  </div>
+  
+  <div className="mt-12 mb-8">
+    <Title level={5}>Change in OI (CCOI vs PCOI) Trend {selectedExpiry && <span className="text-sm text-gray-500 ml-2">({formatUTCDate(selectedExpiry)})</span>}</Title>
+    <p className="text-sm text-gray-600 mb-6">Displaying aggregated Call and Put Change in OI over time{selectedExpiry ? ` for expiry ${formatUTCDate(selectedExpiry)}` : ' for all expiries'}. Data points: {changeInData.length}</p>
+    <div style={{ height: 800 }}>
+      <OIChart data={changeInData.map(d => ({ timestamp: d.timestamp, ceOI: d.ccoi, peOI: d.pcoi }))} callLineName="Call Change in OI (CCOI)" putLineName="Put Change in OI (PCOI)" />
+    </div>
+  </div>
+  
+  <div className="mt-12 mb-8">
+    <Title level={5}>Volume Trend {selectedExpiry && <span className="text-sm text-gray-500 ml-2">({formatUTCDate(selectedExpiry)})</span>}</Title>
+    <p className="text-sm text-gray-600 mb-6">Displaying aggregated Call and Put Volumes over time{selectedExpiry ? ` for expiry ${formatUTCDate(selectedExpiry)}` : ' for all expiries'}. Data points: {historicalData.length}</p>
+    <div style={{ height: 800 }}>
+      <OIChart data={historicalData.map(d => ({ timestamp: d.timestamp, ceOI: d.ceVol, peOI: d.peVol }))} callLineName="Call Volume" putLineName="Put Volume" />
+    </div>
+  </div>
+</TabPane>
         </Tabs>
       </Card>
     </div>
